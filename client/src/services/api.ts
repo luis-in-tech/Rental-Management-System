@@ -66,6 +66,9 @@ export const authAPI = {
 
   registerPublic: (data: any) =>
     api.post('/auth/register', data),
+
+  getSignupOptions: () =>
+    api.get('/auth/signup-options'),
 };
 
 // ============================================
@@ -157,6 +160,14 @@ export const reportsAPI = {
       responseType: 'blob',
     });
   },
+};
+
+// ============================================
+// KEEPALIVE API (Supabase Anti-Pause)
+// ============================================
+export const keepAliveAPI = {
+  getStatus: () => api.get('/keepalive'),
+  triggerPing: () => api.post('/keepalive'),
 };
 
 export default api;

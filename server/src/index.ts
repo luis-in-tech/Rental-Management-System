@@ -14,6 +14,8 @@ import tenantRoutes from './routes/tenants';
 import billRoutes from './routes/bills';
 import announcementRoutes from './routes/announcements';
 import reportRoutes from './routes/reports';
+import keepaliveRoutes from './routes/keepalive';
+import { startKeepAliveScheduler, getKeepAliveStatus } from './services/keepalive';
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -53,6 +55,7 @@ const mountRoutes = (prefix: string) => {
   app.use(`${prefix}/bills`, billRoutes);
   app.use(`${prefix}/announcements`, announcementRoutes);
   app.use(`${prefix}/reports`, reportRoutes);
+  app.use(`${prefix}/keepalive`, keepaliveRoutes);
 };
 
 mountRoutes('/api');
@@ -65,6 +68,7 @@ const healthHandler = (req: express.Request, res: express.Response) => {
     timestamp: new Date().toISOString(),
     version: '1.0.0',
     cors_origin: clientUrl,
+    supabaseKeepAlive: getKeepAliveStatus(),
   });
 };
 app.get('/api/health', healthHandler);
@@ -85,11 +89,16 @@ app.listen(PORT, () => {
   ╔══════════════════════════════════════════════╗
   ║          🏢 RentaHub API Server              ║
   ║  ──────────────────────────────────────────  ║
-  ║  Port:    ${String(PORT).padEnd(35)}║
-  ║  Mode:    ${(process.env.NODE_ENV || 'development').padEnd(35)}║
-  ║  Health:  http://localhost:${PORT}/api/health   ║
+  ║  Port:      ${String(PORT).padEnd(33)}║
+  ║  Mode:      ${(process.env.NODE_ENV || 'development').padEnd(33)}║
+  ║  Health:    http://localhost:${PORT}/api/health     ║
+  ║  KeepAlive: http://localhost:${PORT}/api/keepalive  ║
   ╚══════════════════════════════════════════════╝
   `);
+
+  // Start background database keepalive caller to prevent Supabase 7-day auto-pause
+  startKeepAliveScheduler();
 });
 
 export default app;
+

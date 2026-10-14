@@ -2,6 +2,7 @@ import React from 'react';
 import { Routes, Route, Navigate } from 'react-router-dom';
 import { useAuth } from './contexts/AuthContext';
 import Layout from './components/Layout';
+import LandingPage from './pages/LandingPage';
 import Login from './pages/Login';
 import Dashboard from './pages/Dashboard';
 import Buildings from './pages/Buildings';
@@ -28,29 +29,33 @@ const App: React.FC = () => {
 
   return (
     <Routes>
+      {/* Public Customer & Tenant Landing Page */}
+      <Route path="/" element={<LandingPage />} />
+
+      {/* Authentication */}
       <Route path="/login" element={user ? <Navigate to={user.role === 'tenant' ? '/tenant' : '/dashboard'} replace /> : <Login />} />
 
-      {/* Admin Routes */}
-      <Route path="/" element={<ProtectedRoute adminOnly><Layout /></ProtectedRoute>}>
-        <Route index element={<Navigate to="/dashboard" replace />} />
-        <Route path="dashboard" element={<Dashboard />} />
-        <Route path="buildings" element={<Buildings />} />
-        <Route path="buildings/:buildingId/rooms" element={<Rooms />} />
-        <Route path="rooms" element={<Rooms />} />
-        <Route path="tenants" element={<Tenants />} />
-        <Route path="bills" element={<Bills />} />
-        <Route path="announcements" element={<Announcements />} />
-        <Route path="reports" element={<Reports />} />
+      {/* Admin / Landlord Management Routes */}
+      <Route element={<ProtectedRoute adminOnly><Layout /></ProtectedRoute>}>
+        <Route path="/dashboard" element={<Dashboard />} />
+        <Route path="/buildings" element={<Buildings />} />
+        <Route path="/buildings/:buildingId/rooms" element={<Rooms />} />
+        <Route path="/rooms" element={<Rooms />} />
+        <Route path="/tenants" element={<Tenants />} />
+        <Route path="/bills" element={<Bills />} />
+        <Route path="/announcements" element={<Announcements />} />
+        <Route path="/reports" element={<Reports />} />
       </Route>
 
-      {/* Tenant Routes */}
+      {/* Tenant Resident Portal Routes */}
       <Route path="/tenant" element={<ProtectedRoute><Layout /></ProtectedRoute>}>
         <Route index element={<TenantDashboard />} />
         <Route path="bills" element={<TenantBills />} />
         <Route path="announcements" element={<Announcements />} />
       </Route>
 
-      <Route path="*" element={<Navigate to="/login" replace />} />
+      {/* Fallback to Public Landing Page */}
+      <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
   );
 };

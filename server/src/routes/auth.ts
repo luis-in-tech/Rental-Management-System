@@ -61,6 +61,19 @@ router.post('/login', async (req: Request, res: Response): Promise<void> => {
       }
     }
 
+    if (!adminProfile && !profile) {
+      res.status(403).json({ error: 'No associated landlord or tenant profile found in the database.' });
+      return;
+    }
+
+    // Check if tenant account is pending approval
+    if (!adminProfile && profile?.status === 'inactive') {
+      res.status(403).json({
+        error: 'Your tenant account is pending landlord approval. Please wait for management to verify your contract and documents.',
+      });
+      return;
+    }
+
     res.json({
       token: data.session.access_token,
       refreshToken: data.session.refresh_token,
@@ -78,21 +91,113 @@ router.post('/login', async (req: Request, res: Response): Promise<void> => {
 });
 
 /**
- * POST /api/auth/register
- * Public registration for building admins (landlords)
+ * GET /api/auth/signup-options
+ * Public endpoint to fetch available buildings and rooms for tenant signup
  */
-router.post('/register', async (req: Request, res: Response): Promise<void> => {
+router.get('/signup-options', async (_req: Request, res: Response): Promise<void> => {
   try {
-    const { email, password, fullName } = req.body;
+    const { data: buildings, error } = await supabaseAdmin
+      .from('buildings')
+      .select(`
+        id,
+        name,
+        address,
+        rooms (
+          id,
+          room_number,
+          floor,
+          monthly_rate,
+          status
+        )
+      `)
+      .order('name');
 
-    if (!email || !password || !fullName) {
-      res.status(400).json({ error: 'Missing required fields' });
+    if (error) {
+      res.status(400).json({ error: error.message });
       return;
     }
 
-    // Create auth user
+    res.json({ buildings: buildings || [] });
+  } catch (err: any) {
+    console.error('Signup options error:', err);
+    res.status(500).json({ error: 'Failed to load signup options' });
+  }
+});
+
+/**
+ * POST /api/auth/register
+ * Public registration for tenants with lease contracts (sets status: 'inactive' pending landlord approval)
+ */
+router.post('/register', async (req: Request, res: Response): Promise<void> => {
+  try {
+    let { email, password, firstName, lastName, fullName, phone, roomId, moveInDate } = req.body;
+
+    if (!firstName && fullName) {
+      const parts = fullName.trim().split(' ');
+      firstName = parts[0] || 'Tenant';
+      lastName = parts.slice(1).join(' ') || 'User';
+    }
+
+    if (!email || !password || !firstName || !lastName || !roomId) {
+      res.status(400).json({ error: 'First name, last name, email, password, and room selection are required.' });
+      return;
+    }
+
+    const cleanEmail = email.trim().toLowerCase();
+
+    // Check if tenant email already exists
+    const { data: existingTenant } = await supabaseAdmin
+      .from('tenants')
+      .select('id')
+      .eq('email', cleanEmail)
+      .single();
+
+    if (existingTenant) {
+      res.status(400).json({ error: 'A tenant registration with this email already exists.' });
+      return;
+    }
+
+    // Verify room exists
+    const { data: room, error: roomError } = await supabaseAdmin
+      .from('rooms')
+      .select('id, building_id')
+      .eq('id', roomId)
+      .single();
+
+    if (roomError || !room) {
+      res.status(404).json({ error: 'Selected room not found.' });
+      return;
+    }
+
+    // Find or create account for room
+    let { data: account } = await supabaseAdmin
+      .from('accounts')
+      .select('id')
+      .eq('room_id', roomId)
+      .single();
+
+    if (!account) {
+      const { data: newAccount, error: accError } = await supabaseAdmin
+        .from('accounts')
+        .insert({
+          room_id: roomId,
+          primary_email: cleanEmail,
+          status: 'inactive', // pending landlord approval
+          move_in_date: moveInDate || new Date().toISOString().split('T')[0],
+        })
+        .select('id')
+        .single();
+
+      if (accError) {
+        res.status(400).json({ error: accError.message });
+        return;
+      }
+      account = newAccount;
+    }
+
+    // Create auth user in Supabase
     const { data: authData, error: authError } = await supabaseAdmin.auth.admin.createUser({
-      email,
+      email: cleanEmail,
       password,
       email_confirm: true,
     });
@@ -102,27 +207,43 @@ router.post('/register', async (req: Request, res: Response): Promise<void> => {
       return;
     }
 
-    // Create admin profile
-    const { data: admin, error: adminError } = await supabaseAdmin
-      .from('admin_profiles')
+    // Create tenant record with status = 'inactive' (Pending landlord approval)
+    const { data: tenant, error: tenantError } = await supabaseAdmin
+      .from('tenants')
       .insert({
+        account_id: account.id,
         auth_user_id: authData.user.id,
-        full_name: fullName,
-        email,
-        role: 'admin',
+        first_name: firstName.trim(),
+        last_name: lastName.trim(),
+        email: cleanEmail,
+        phone: phone ? phone.trim() : null,
+        is_primary: true,
+        status: 'inactive', // Pending landlord approval
       })
-      .select()
+      .select(`
+        *,
+        account:accounts(
+          *,
+          room:rooms(
+            *,
+            building:buildings(*)
+          )
+        )
+      `)
       .single();
 
-    if (adminError) {
+    if (tenantError) {
       await supabaseAdmin.auth.admin.deleteUser(authData.user.id);
-      res.status(400).json({ error: adminError.message });
+      res.status(400).json({ error: tenantError.message });
       return;
     }
 
-    res.status(201).json({ admin });
+    res.status(201).json({
+      message: 'Registration submitted successfully. Your account is pending landlord approval.',
+      tenant,
+    });
   } catch (err: any) {
-    console.error('Public registration error:', err);
+    console.error('Public tenant registration error:', err);
     res.status(500).json({ error: err.message || 'Registration failed' });
   }
 });

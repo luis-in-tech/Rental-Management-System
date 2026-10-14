@@ -1,9 +1,9 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { NavLink, Outlet, useLocation } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import {
   LayoutDashboard, Building2, DoorOpen, Users, Receipt,
-  Megaphone, BarChart3, LogOut, Home
+  Megaphone, BarChart3, LogOut, Home, Menu, X
 } from 'lucide-react';
 
 const adminNav = [
@@ -37,6 +37,7 @@ const pageTitles: Record<string, { title: string; subtitle: string }> = {
 
 const Layout: React.FC = () => {
   const { user, logout, isAdmin } = useAuth();
+  const [mobileOpen, setMobileOpen] = useState(false);
   const location = useLocation();
   const nav = isAdmin ? adminNav : tenantNav;
   const basePath = location.pathname.replace(/\/[a-f0-9-]+\/rooms.*/, '/buildings');
@@ -59,7 +60,11 @@ const Layout: React.FC = () => {
 
   return (
     <div className="app-layout">
-      <aside className="sidebar">
+      <div 
+        className={`sidebar-overlay ${mobileOpen ? 'active' : ''}`} 
+        onClick={() => setMobileOpen(false)} 
+      />
+      <aside className={`sidebar ${mobileOpen ? 'open' : ''}`}>
         <div className="sidebar-logo">
           <div className="logo-icon">R</div>
           <div>
@@ -76,6 +81,7 @@ const Layout: React.FC = () => {
               to={item.to}
               end={item.to === '/tenant'}
               className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`}
+              onClick={() => setMobileOpen(false)}
             >
               <item.icon />
               {item.label}
@@ -100,8 +106,18 @@ const Layout: React.FC = () => {
       <div className="main-content">
         <header className="header">
           <div className="header-left">
-            <h2>{pageInfo.title}</h2>
-            <p>{pageInfo.subtitle}</p>
+            <button 
+              type="button" 
+              className="mobile-menu-btn" 
+              onClick={() => setMobileOpen(!mobileOpen)}
+              aria-label="Toggle navigation menu"
+            >
+              {mobileOpen ? <X size={20} /> : <Menu size={20} />}
+            </button>
+            <div>
+              <h2>{pageInfo.title}</h2>
+              <p>{pageInfo.subtitle}</p>
+            </div>
           </div>
         </header>
         <main className="page fade-in">

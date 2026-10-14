@@ -206,6 +206,23 @@ router.put('/:id', authenticate, requireAdmin, async (req: Request, res: Respons
       return;
     }
 
+    // If status is active, activate account and set room occupied
+    if (status === 'active') {
+      const { data: acc } = await supabaseAdmin
+        .from('accounts')
+        .update({ status: 'active' })
+        .eq('id', tenant.account_id)
+        .select('room_id')
+        .single();
+
+      if (acc?.room_id) {
+        await supabaseAdmin
+          .from('rooms')
+          .update({ status: 'occupied' })
+          .eq('id', acc.room_id);
+      }
+    }
+
     // If set as primary, update account and remove primary from others
     if (isPrimary && email) {
       await supabaseAdmin

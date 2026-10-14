@@ -66,6 +66,7 @@ This starts both the backend (port 3001) and frontend (port 5173) concurrently.
 | 📊 Financial Reports | Charts and analytics with Excel/CSV export |
 | 🔐 Dual Portal | Admin dashboard + Tenant portal with role-based access |
 | 📧 Multi-Email Accounts | Multiple tenants per room, one primary email per account |
+| 🛡️ Supabase KeepAlive | Anti-pause automated database caller to keep free-tier Supabase active |
 
 ## Project Structure
 

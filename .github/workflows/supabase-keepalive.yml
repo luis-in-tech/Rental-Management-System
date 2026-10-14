@@ -1,0 +1,45 @@
+name: Supabase KeepAlive Ping
+
+on:
+  schedule:
+    # Runs every 3 days at 06:00 UTC (well within Supabase's 7-day inactivity pause window)
+    - cron: '0 6 */3 * *'
+  workflow_dispatch: # Allows manual trigger from the GitHub Actions tab anytime
+
+jobs:
+  keepalive:
+    name: Ping Supabase & Backend
+    runs-on: ubuntu-latest
+    steps:
+      - name: Ping Supabase Database via REST API
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL || 'https://jeawodqlhcjsbshpxhvy.supabase.co' }}
+          SUPABASE_KEY: ${{ secrets.SUPABASE_ANON_KEY || secrets.SUPABASE_SERVICE_ROLE_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImplYXdvZHFsaGNqc2JzaHB4aHZ5Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODE5NDQ5MjEsImV4cCI6MjA5NzUyMDkyMX0.8YN1lZBq6DoEwHm-BEs_LAX1aAE2mMeHdgFvVyRwvKU' }}
+        run: |
+          echo "Sending keepalive query to Supabase: $SUPABASE_URL"
+          RESPONSE=$(curl -s -w "\n%{http_code}" -X GET \
+            "$SUPABASE_URL/rest/v1/buildings?select=id&limit=1" \
+            -H "apikey: $SUPABASE_KEY" \
+            -H "Authorization: Bearer $SUPABASE_KEY")
+          
+          HTTP_CODE=$(echo "$RESPONSE" | tail -n1)
+          BODY=$(echo "$RESPONSE" | sed '$d')
+          
+          echo "HTTP Response Status: $HTTP_CODE"
+          echo "Response Body: $BODY"
+          
+          if [ "$HTTP_CODE" -ge 200 ] && [ "$HTTP_CODE" -lt 300 ]; then
+            echo "✅ Supabase project ping succeeded! Inactivity pause timer refreshed."
+          else
+            echo "❌ Ping received unexpected status code: $HTTP_CODE"
+            exit 1
+          fi
+
+      - name: Ping Render Backend KeepAlive Endpoint (Optional)
+        env:
+          BACKEND_URL: ${{ secrets.RENDER_BACKEND_URL || 'https://rentalhub-api-dajt.onrender.com' }}
+        run: |
+          if [ -n "$BACKEND_URL" ]; then
+            echo "Pinging backend keepalive endpoint at $BACKEND_URL/api/keepalive?ping=true"
+            curl -s -f -X GET "$BACKEND_URL/api/keepalive?ping=true" || echo "Backend unreachable or asleep, primary Supabase direct ping already completed."
+          fi

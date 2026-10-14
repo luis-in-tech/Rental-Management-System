@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Plus, UserPlus, UserMinus, Star, Mail, Phone, Edit2, Trash2 } from 'lucide-react';
+import { UserPlus, Star, Mail, Phone, Edit2, Trash2, Check, Clock, AlertCircle } from 'lucide-react';
 import { tenantsAPI, roomsAPI, buildingsAPI, authAPI } from '../services/api';
 import { Tenant, Building, Room } from '../types';
 
@@ -9,6 +9,7 @@ const Tenants: React.FC = () => {
   const [rooms, setRooms] = useState<Room[]>([]);
   const [loading, setLoading] = useState(true);
   const [filterBuilding, setFilterBuilding] = useState('');
+  const [filterStatus, setFilterStatus] = useState('');
   const [showModal, setShowModal] = useState(false);
   const [editing, setEditing] = useState<Tenant | null>(null);
   const [form, setForm] = useState({ accountId: '', firstName: '', lastName: '', email: '', password: '', phone: '', isPrimary: false });
@@ -26,6 +27,16 @@ const Tenants: React.FC = () => {
       setBuildings(bRes.data.buildings || []);
       setRooms(rRes.data.rooms?.filter((r: Room) => r.account) || []);
     } catch (err) { console.error(err); } finally { setLoading(false); }
+  };
+
+  const handleApprove = async (id: string, name: string) => {
+    if (!confirm(`Approve and activate tenant account for ${name}?\n\nThis confirms their identity against their contract & IDs and grants them active access to their tenant portal.`)) return;
+    try {
+      await tenantsAPI.update(id, { status: 'active' });
+      loadData();
+    } catch (err: any) {
+      alert(err.response?.data?.error || 'Failed to approve tenant');
+    }
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -62,20 +73,52 @@ const Tenants: React.FC = () => {
     setShowModal(true);
   };
 
-  const filtered = filterBuilding
-    ? tenants.filter((t: any) => t.account?.room?.building?.id === filterBuilding)
-    : tenants;
+  const pendingCount = tenants.filter(t => t.status === 'inactive').length;
+
+  const filtered = tenants.filter((t: any) => {
+    if (filterBuilding && t.account?.room?.building?.id !== filterBuilding) return false;
+    if (filterStatus && t.status !== filterStatus) return false;
+    return true;
+  });
 
   if (loading) return <div className="loading-spinner"><div className="spinner" /></div>;
 
   return (
     <div className="fade-in">
+      {pendingCount > 0 && (
+        <div 
+          style={{ 
+            background: 'rgba(245, 158, 11, 0.1)', 
+            border: '1px solid rgba(245, 158, 11, 0.35)', 
+            borderRadius: 'var(--radius-sm)', 
+            padding: '0.75rem 1rem', 
+            marginBottom: '1rem',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '0.6rem',
+            color: '#b45309',
+            fontSize: '0.85rem',
+            fontWeight: 600,
+          }}
+        >
+          <AlertCircle size={18} />
+          <span>
+            {pendingCount} tenant registration(s) pending landlord verification. Please check the contract and submitted IDs, then click "Approve" to activate their portal access.
+          </span>
+        </div>
+      )}
+
       <div className="flex-between mb-2">
         <div className="filter-bar">
           <span className="filter-label">Filter:</span>
           <select value={filterBuilding} onChange={e => setFilterBuilding(e.target.value)}>
             <option value="">All Buildings</option>
             {buildings.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
+          </select>
+          <select value={filterStatus} onChange={e => setFilterStatus(e.target.value)}>
+            <option value="">All Statuses</option>
+            <option value="active">Active ({tenants.filter(t => t.status === 'active').length})</option>
+            <option value="inactive">Pending Approval ({pendingCount})</option>
           </select>
           <span className="text-muted text-sm">{filtered.length} tenant(s)</span>
         </div>
@@ -91,17 +134,35 @@ const Tenants: React.FC = () => {
           </thead>
           <tbody>
             {filtered.map((t: any) => (
-              <tr key={t.id}>
+              <tr key={t.id} style={t.status === 'inactive' ? { background: 'rgba(245, 158, 11, 0.03)' } : {}}>
                 <td><strong>{t.first_name} {t.last_name}</strong></td>
                 <td><span className="flex gap-1" style={{ alignItems: 'center' }}><Mail size={13} /> {t.email}</span></td>
                 <td>{t.phone ? <span className="flex gap-1" style={{ alignItems: 'center' }}><Phone size={13} /> {t.phone}</span> : <span className="text-muted">—</span>}</td>
                 <td>{t.account?.room?.building?.name || '—'} / {t.account?.room?.room_number || '—'}</td>
                 <td>{t.is_primary ? <span className="badge badge-warning"><Star size={10} /> Primary</span> : <span className="badge badge-muted">Member</span>}</td>
-                <td><span className={`badge badge-${t.status === 'active' ? 'success' : 'danger'}`}>{t.status}</span></td>
                 <td>
-                  <div className="flex gap-1">
-                    <button className="btn-icon btn-sm" onClick={() => openEdit(t)}><Edit2 size={14} /></button>
-                    <button className="btn-icon btn-sm" onClick={() => handleDelete(t.id)}><Trash2 size={14} /></button>
+                  {t.status === 'active' ? (
+                    <span className="badge badge-success">Active</span>
+                  ) : (
+                    <span className="badge badge-warning" style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                      <Clock size={11} /> Pending Approval
+                    </span>
+                  )}
+                </td>
+                <td>
+                  <div className="flex gap-1" style={{ alignItems: 'center' }}>
+                    {t.status === 'inactive' && (
+                      <button 
+                        className="btn btn-sm btn-success" 
+                        style={{ padding: '0.22rem 0.55rem', fontSize: '0.75rem', display: 'inline-flex', alignItems: 'center', gap: 4 }}
+                        onClick={() => handleApprove(t.id, `${t.first_name} ${t.last_name}`)}
+                        title="Verify against documents & Approve Tenant"
+                      >
+                        <Check size={13} /> Approve
+                      </button>
+                    )}
+                    <button className="btn-icon btn-sm" onClick={() => openEdit(t)} title="Edit Tenant"><Edit2 size={14} /></button>
+                    <button className="btn-icon btn-sm" onClick={() => handleDelete(t.id)} title="Delete Tenant"><Trash2 size={14} /></button>
                   </div>
                 </td>
               </tr>

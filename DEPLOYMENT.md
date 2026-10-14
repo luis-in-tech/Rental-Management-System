@@ -149,4 +149,25 @@ To prevent the browser from blocking requests between your frontend and backend 
 5. Save the changes.
 6. Render will automatically redeploy the service with the updated environment.
 
-**🎉 Congratulations! Your Rental Management SaaS is now live and fully connected.**
+---
+
+## 5. 🛡️ Supabase Free Tier Anti-Pause KeepAlive
+
+Supabase Free Tier projects automatically pause after **7 consecutive days of inactivity**. To prevent your database from pausing, RentaHub includes a 3-layer automated KeepAlive system:
+
+1. **Automatic Backend KeepAlive Scheduler**:
+   - The Express backend automatically queries the Supabase database every 6 hours (configurable via `SUPABASE_KEEPALIVE_INTERVAL_HOURS` in your environment variables).
+   - This counts as active REST API traffic and automatically resets the 7-day inactivity counter.
+
+2. **Dedicated HTTP KeepAlive Endpoint**:
+   - URL: `https://<your-render-name>.onrender.com/api/keepalive?ping=true`
+   - You can connect this URL to a free uptime monitor (such as [cron-job.org](https://cron-job.org) or [UptimeRobot](https://uptimerobot.com)) every 10–14 minutes.
+   - **Double Benefit**: This keeps your Render web service awake AND continuously pings Supabase!
+
+3. **Serverless GitHub Actions Cron Job**:
+   - Pre-configured in `.github/workflows/supabase-keepalive.yml`.
+   - Runs automatically every 3 days in the cloud (even if your local machine is off and Render is asleep) to send an authenticated query directly to your Supabase REST endpoint.
+   - Simply add `SUPABASE_URL` and `SUPABASE_ANON_KEY` to your GitHub Repository Secrets (`Settings > Secrets and variables > Actions`).
+
+**🎉 Congratulations! Your Rental Management SaaS is now live, fully connected, and protected from auto-pausing.**
+
